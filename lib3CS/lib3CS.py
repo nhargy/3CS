@@ -251,6 +251,7 @@ def take_exposure():
     s.spectro.save_path = file_path
     
     
+    
     s.spectro.saved = True
     
     
