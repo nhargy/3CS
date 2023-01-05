@@ -39,9 +39,9 @@ import matplotlib.pyplot as plt
 
 ## REQUIRED VARIABLES FROM CONFIG FILE ##
 # PATH_TO_SINGLE
-path_to_single = 'D:\3CS\DATA\SingleExposures'
+path_to_single = 'D:\\3CS\\DATA\\SingleExposures'
 # PATH TO SCANS
-path_to_scans = 'D:\3CS\DATA\_Scans_'
+path_to_scans = 'D:\\3CS\\DATA\\_Scans_'
 # PATH TO POWERCORRELATIONS
 # PATH TO ELECTRONICNOISE
 
@@ -201,26 +201,41 @@ def exc_rules(wl):
 """
 return the x,y arrays from a file, given a starting line
 """
-def read_xy(path,startline,split):
+def read_xy(path,startline,split=None):
     
     # path     : str value specifying path to file
     # startline: int value specifying the line in the file from which to start reading
     # split    : str value specifying the string delineating the x value from the y values
-    np.loadtxt(path, delimiter=split, skip=startline)
-    sig = open(path,'r')
-    x = []
-    y = []
-    Lines = sig.readlines()
-    
-    size = len(Lines)
-    for line in range(startline,size):
-        x_val = float(Lines[line].split(split)[0])
-        y_val = float(Lines[line].split(split)[1])
-
-        x.append(x_val)
-        y.append(y_val)
+    x, y = np.loadtxt(path, delimiter=split, skiprows=startline).T
+    x = x.astype(np.float);y = y.astype(np.float);
     
     return x, y
+
+
+"""
+simply plots the signal in a convenient form
+"""
+def plot_signal(path,save_path,startline,split=None,colour='darkred',xl = r'Wavelength $[nm]$',yl = 'Photon Count',title = rf'Exposure Signal',save=False):
+    
+    plt.rcParams["figure.figsize"] = 12, 4
+    
+    x,y = read_xy(path,startline,split)
+    
+    plt.plot(x,y,color=colour)
+    plt.xlabel(xl)
+    plt.ylabel(yl)
+    plt.grid('on')
+    plt.title(title)
+    
+    if save == False:
+        plt.show()
+        
+    elif save ==  True:
+        plt.savefig(save_path)
+    
+    return None
+    
+    
 
 """
 takes an exposure without regard to any settings
@@ -240,20 +255,80 @@ def take_exposure():
     now  = date_id()
     temp_id = rf'exp_{now}'
     
-    # save file while making sure no overrides
+    # save file while making sure of no overrides
     count = 1
-    file_path = os.path.join(path_to_single,rf'{temp_id}.json')
+    file_path = os.path.join(path_to_single,rf'{temp_id}_(0).txt')
     while os.path.exists(file_path) == True:
-        file_path = os.path.join(path_to_single,rf'{temp_id}_({count}).json')
+        file_path = os.path.join(path_to_single,rf'{temp_id}_({count}).txt')
         count+=1
-    
 
     s.spectro.save_path = file_path
-    
-    
-    
     s.spectro.saved = True
     
+    plot_signal(file_path,'',31)
+    
+    time.sleep(1)
+    
+    query = input('Save this signal? (y or n): ')
+    if query == 'y' or 'Y':
+        crystal = input('Enter the name of the crystal: ')
+        perm_id = rf'{crystal}_{now}'
+        save_path = os.path.join(path_to_single,rf'{perm_id}.txt')
+        
+        print()
+        print('Gathering metadata... this may take a minute.')
+        
+        # build metadata
+        data = ''
+        data += 'link: '+ path_to_single +'\n'
+        
+        data += 'pm_read: '+str(powerval) +'\n'
+        
+        powerunit = s.power_meter_b.unit
+        data += 'pm_unit: '+str(powerunit) +'\n'
+        
+        power_count = s.power_meter_b.count
+        data += 'pm_count: '+str(power_count) +'\n'
+        
+        power_wavelength = s.power_meter_b.wavelength
+        data += 'pm_wavelength: '+str(power_wavelength) +'\n'        
+        
+        data += 'spfw: '+ str(s.spfw.position) +'\n'
+        data += 'lpfw: '+ str(s.lpfw.position) +'\n'
+        data += 'lpfw2: '+ str(s.lpfw2.position) +'\n'
+        data += 'mono_grating: '+ str(s.horiba.gr) +'\n'
+        data += 'mono_wavelength: '+ str(round(s.horiba.wl,1)) +'\n'
+        data += 'spectro_grating: '+ str(s.spectro.grating) +'\n'
+        data+='\n'
+        
+        # merge metadata with signal data
+        with open(file_path,'r') as fp:
+            data2 = fp.read()
+            data+=data2
+        
+        folder_path = os.path.join(path_to_single,rf'{perm_id}')
+        if not os.path.exists(folder_path):
+            os.mkdir(folder_path)
+            
+        save_path =  os.path.join(folder_path,rf'{perm_id}.txt') 
+        open(save_path,'x')
+        with open(save_path,'w') as fp:
+            fp.write(data)
+   
+        print()
+        print('Saved plot as: ')
+
+        fig_path = os.path.join(folder_path,rf'{crystal}_plot.png')
+        plot_signal(file_path,fig_path,31,title=rf'{perm_id}',save=True)
+            
+        os.remove(file_path)
+        print(rf'Saved signal to: {save_path} .')
+        
+    else:
+        os.remove(file_path)
+        print()
+        print('Did not save signal.')
+
     
     
     
