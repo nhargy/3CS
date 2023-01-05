@@ -38,12 +38,15 @@ import matplotlib.pyplot as plt
 # -- -------- --- #
 
 ## REQUIRED VARIABLES FROM CONFIG FILE ##
+
 # PATH_TO_SINGLE
 path_to_single = 'D:\\3CS\\DATA\\SingleExposures'
 # PATH TO SCANS
 path_to_scans = 'D:\\3CS\\DATA\\_Scans_'
 # PATH TO POWERCORRELATIONS
+path_to_power = 'D:\\3CS\\DATA\\PowerCorrelations'
 # PATH TO ELECTRONICNOISE
+path_to_noise = 'D:\\3CS\\DATA\\ElectronicNoise'
 
 
 """
@@ -100,6 +103,113 @@ def zero():
     print("All done. System zeroed")
     print()
 
+
+"""
+Lets the user manually change system settings.
+"""
+def ctrl(source_power = None, source_shutter_control = None, source_shutter = None, spfw = None, lpfw = None, lpfw2 = None, flipper = None, flipperB = None, mono_wl = None, mono_gr = None, spec_gr = None, spec_wl = None, spec_exp = None, spec_slit = None, spec_shutter = None, spec_running = None, spec_save_path = None, spec_saved = None, power_meter_a_count = None, power_meter_b_count = None, power_meter_a_power = None, power_meter_b_power = None, power_meter_a_unit = None, power_meter_b_unit = None):
+    
+    if source_power != None:
+        print(rf'Setting source_power to {source_power}%')
+        s.source.power = source_power
+        
+    if source_shutter_control != None:
+        print(rf'Setting source shutter to {source_shutter_control} control')
+        s.source_shutter.control = source_shutter_control
+
+    if source_shutter != None:
+        print(rf'Source shutter on is {source_shutter}')
+        s.source_shutter = source_shutter
+
+    if spfw != None:
+        print(rf'Setting spfw to position {spfw}')
+        s.spfw.position = spfw
+        
+    if lpfw != None:
+        print(rf'Setting lpfw to position {lpfw}')
+        s.lpfw.position = lpfw
+        
+    if lpfw2 != None:
+        print(rf'Setting lpfw2 to position {lpfw2}')
+        s.lpfw2.position = lpfw2
+        
+    if flipper != None:
+        print(rf'Flipper set to {flipper}')
+        s.flipper.position = flipper
+        
+    if flipperB != None:
+        print(rf'FlipperB set to {flipperB}')
+        s.flipperB.position = flipperB
+        
+    if mono_wl != None:
+        print(rf'Setting monochromator wavelength to {mono_wl}nm')
+        s.horiba.wl = mono_wl
+        
+    if mono_gr != None:
+        print(rf'Setting monochromator grating to {mono_gr}')
+        s.horiba.gr = mono_gr
+        
+    if spec_gr != None:
+        print(rf'Setting spectrometer grating to {spec_gr}')
+        s.spectro.grating = spec_gr
+        
+    if spec_wl != None:
+        print(rf'Setting spectrometer wavelength to {spec_wl}')
+        s.spectro.wavelength = spec_wl
+        
+    if spec_exp != None:
+        print(rf'Setting spectrometer exposure time to {spec_exp}')
+        s.spectro.exposure = spec_exp
+        
+    if spec_slit != None:
+        print(rf'Setting spectrometer slit width to {spec_slit} microns')
+        s.spectro.slit_width = spec_slit
+        
+    if spec_shutter != None:
+        print(rf'Spectrometer shutter is {spec_shutter}')
+        s.spectro.shutter = spec_shutter
+        
+    if spec_running != None:
+        print()
+        print('Taking data...')
+        print()
+        s.spectro.running = spec_running
+        
+    if spec_save_path != None:
+        s.spectro.save_path = spec_save_path
+        
+    if spec_saved != None:
+        s.spectro.saved = spec_saved
+        print('Spectrometer data saved.')
+        print()
+        
+    if power_meter_a_count != None:
+        print(rf'Power meter a count set to {power_meter_a_count}')
+        s.power_meter_a.count = power_meter_a_count
+        
+    if power_meter_b_count != None:
+        print(rf'Power meter b count set to {power_meter_b_count}')
+        s.power_meter_b.count = power_meter_b_count
+        
+    if power_meter_a_power == True:
+        pow_a = s.power_meter_a.power
+        print('Power meter a: '+str(pow_a))
+        
+    if power_meter_b_power == True:
+        pow_b = s.power_meter_b.power
+        print('Power meter b: '+str(pow_b))
+        
+    if power_meter_a_unit == True:
+        pow_a_unit = s.power_meter_a.unit
+        print('Unit of power meter a: '+str(pow_a_unit))
+        
+    if power_meter_b_unit == True:
+        pow_b_unit = s.power_meter_b.unit
+        print('Unit of power meter b: '+str(pow_b_unit))
+        
+    print()
+    print('All set.')
+    return None
 
 """    
 creates a unique ID string based on the current time
@@ -329,7 +439,9 @@ def take_exposure():
         print()
         print('Did not save signal.')
 
-    
+
+
+
     
     
     
