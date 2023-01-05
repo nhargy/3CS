@@ -247,7 +247,10 @@ def take_exposure():
         file_path = os.path.join(path_to_single,rf'{temp_id}_({count}).json')
         count+=1
     
+
     s.spectro.save_path = file_path
+    
+    
     s.spectro.saved = True
     
     
