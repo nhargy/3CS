@@ -33,6 +33,7 @@ import json
 from datetime import datetime
 import re
 import numpy as np
+from scipy import interpolate
 import matplotlib.pyplot as plt
 
 # -- -------- --- #
@@ -47,6 +48,7 @@ path_to_scans = 'D:\\3CS\\DATA\\_Scans_'
 path_to_power = 'D:\\3CS\\DATA\\PowerCorrelations'
 # PATH TO ELECTRONICNOISE
 path_to_noise = 'D:\\3CS\\DATA\\ElectronicNoise'
+
 
 
 """
@@ -64,13 +66,14 @@ def test():
         print("FAIL. Is the server running?")
 
 
+
 """
 Zeros the system to predefined settings.
 """
 def zero():
     
-    source_power = 100;t_exp = 1;slit = 1000;spec_wl = 500;
-    spec_gr = 1;mono_wl = 250;mono_gr = 0
+    source_power = 100; t_exp = 1; slit = 1000; spec_wl = 500; spfw = 6
+    lpfw=6; lpfw2=6; spec_gr = 1; mono_wl = 250; mono_gr = 0
     
     print("Zeroing... this may take a minute.")
     print()
@@ -85,6 +88,10 @@ def zero():
     s.flipper.position = "down"
     s.flipperB.position = "down"
     s.spectro.shutter = "closed"
+    print(rf'Setting all the filters to {spfw}...')
+    s.spfw.position = spfw
+    s.lpfw.position = lpfw
+    s.lpfw2.position = lpfw2
     print(rf"Setting exposure time to {t_exp} seconds...")
     s.spectro.exposure = t_exp
     print(rf"Setting spectrometer slit width to {slit} microns...")
@@ -102,6 +109,7 @@ def zero():
     s.power_meter_b.wavelength = mono_wl
     print("All done. System zeroed")
     print()
+
 
 
 """
@@ -211,6 +219,8 @@ def ctrl(source_power = None, source_shutter_control = None, source_shutter = No
     print('All set.')
     return None
 
+
+
 """    
 creates a unique ID string based on the current time
 """
@@ -222,6 +232,7 @@ def date_id():
     date = rf'{b[0]}-{b[2]}-{b[1]}-{b[3]}{b[4]}'
     
     return date
+
 
 
 """
@@ -308,18 +319,26 @@ def exc_rules(wl):
     return [grating,spfw,lpfw,lpfw2,mono_grating]
 
 
+
 """
 return the x,y arrays from a file, given a starting line
 """
-def read_xy(path,startline,split=None):
+def read_xy(path,startline,split=None,col=2):
     
     # path     : str value specifying path to file
     # startline: int value specifying the line in the file from which to start reading
     # split    : str value specifying the string delineating the x value from the y values
-    x, y = np.loadtxt(path, delimiter=split, skiprows=startline).T
-    x = x.astype(np.float);y = y.astype(np.float);
+    if col == 2:
+        x, y = np.loadtxt(path, delimiter=split, skiprows=startline).T
+        x = x.astype(np.float);y = y.astype(np.float)
+        return x, y
+        
+    elif col == 3:
+        w, x, y = np.loadtxt(path, delimiter=split, skiprows=startline).T
+        w = w.astype(np.float);x = x.astype(np.float);y = y.astype(np.float)
+        return w, x, y
     
-    return x, y
+
 
 
 """
@@ -345,7 +364,22 @@ def plot_signal(path,save_path,startline,split=None,colour='darkred',xl = r'Wave
     
     return None
     
-    
+
+
+"""
+saves a value to a file as a string 
+"""   
+def save_string(string,path,newline):
+    with open(path, 'a') as f:
+        if newline == True:
+            f.write(string)
+            f.write('\n')
+        else:
+            f.write(string)
+            
+    return None
+
+
 
 """
 takes an exposure without regard to any settings
@@ -439,6 +473,138 @@ def take_exposure():
         print()
         print('Did not save signal.')
 
+
+
+"""
+takes power correlation data between power meters A and B
+"""
+def take_power(min_wl, max_wl,step):
+    
+    # zero the system before starting
+    zero()
+    
+    now = date_id()
+    pow_id = rf'PowCorr_{now}'
+    
+    folder_path = os.path.join(path_to_power,pow_id)
+    if not os.path.exists(folder_path):
+        os.mkdir(folder_path)
+    
+    wl_vals = np.arange(min_wl,max_wl,step)
+    gratings = [0,1]
+    
+    # loop through the two gratings
+    for i in gratings:
+
+        print(rf"Starting measurements for grating {i}!")
+        print()
+
+        # open source shutter:
+        s.source_shutter.control = "computer"
+        s.source_shutter.on = True
+
+        # set grating
+        s.horiba.gr = i
+
+        # make sure pm set to power
+        s.power_meter_a.unit = 0
+        s.power_meter_b.unit = 0
+
+        # create file
+        path = os.path.join(folder_path, rf'pow_gr{i}.txt')
+        open(path, "x")
+
+        # save metadata
+        save_string(rf'Date: {now}',path,True)
+        save_string('Mono_grating: '+str(s.horiba.gr),path,True)
+        save_string('',path,True)
+
+        count = 0
+        for wl in wl_vals:
+            print(rf'{count}. Setting wavelength to: '+str(wl))
+            s.horiba.wl = wl
+            s.power_meter_a.wavelength = wl
+            s.power_meter_b.wavelength = wl
+
+            #get power reading
+            print('Getting power...')
+            power_read_a = s.power_meter_a.power
+            power_read_b = s.power_meter_b.power
+
+            #save measurement
+            save_string(str(wl)+' ',path,False)
+            save_string(str(power_read_a)+' ',path,False)
+            save_string(str(power_read_b),path,True)
+
+            count+=1
+            print('Measurement recorded successfully.')
+            print()
+            print()
+            
+    s.source_shutter.on = False
+    print('All done.')
+    
+    return None
+    
+    
+    
+"""
+analyses the power ratio between B and A
+"""
+def analyse_power(pow_id):
+    
+    file0_path = rf'D:/3CS/DATA/PowerCorrelations/{pow_id}/pow_gr{0}.txt'
+    file1_path = rf'D:/3CS/DATA/PowerCorrelations/{pow_id}/pow_gr{1}.txt'
+    
+    wl0,a0,b0 = read_xy(file0_path,3,split=' ',col=3)
+    wl1,a1,b1 = read_xy(file1_path,3,split=' ',col=3)
+    
+    b0_over_a0 = np.divide(b0,a0)
+    b1_over_a1 = np.divide(b1,a1)
+    
+    ratio_path = rf'D:/3CS/DATA/PowerCorrelations/{pow_id}/pow_ratio.txt'
+    if not os.path.exists(ratio_path):
+        np.savetxt(ratio_path,np.array([wl0,b0_over_a0,b1_over_a1]).T,delimiter=' ')
+    
+    ratio0 = interpolate.interp1d(wl0, b0_over_a0)
+    ratio1 = interpolate.interp1d(wl1, b1_over_a1)
+    
+    inter_b0_over_a0 = ratio0(wl0)
+    inter_b1_over_a1 = ratio1(wl1)
+    
+    plt.rcParams["figure.figsize"] = 15, 4
+    
+    figure, axis = plt.subplots(1, 2)
+    
+    axis[0].plot(wl0,b0_over_a0, 'o',color='darkred',label='Mono_grating 0')
+    axis[0].plot(wl0,inter_b0_over_a0, '-',color='red')
+    axis[0].plot(wl1,b1_over_a1, 'o',color='darkblue',label='Mono_grating 1')
+    axis[0].plot(wl1,inter_b1_over_a1, '-',color='blue')
+    
+    axis[0].grid('on')
+    axis[0].legend()
+    axis[0].set_title('Power meter ratio: '+ pow_id)
+    axis[0].set_xlabel(r'Wavelength $[nm]$')
+    axis[0].set_ylabel('B/A')
+    
+    axis[1].plot(wl0,np.multiply(a0,1e6),color='darkgreen',label='Mono_grating 0')
+    axis[1].plot(wl0,np.multiply(b0,1e6),'--',color='darkgreen')
+    axis[1].plot(wl1,np.multiply(a1,1e6),color='purple',label='Mono_grating 1')
+    axis[1].plot(wl1,np.multiply(b1,1e6),'--',color='purple')
+    
+    axis[1].grid('on')
+    axis[1].legend()
+    axis[1].set_title('Monochromator efficiency: '+pow_id)
+    axis[1].set_xlabel(r'Wavelength $[nm]$')
+    axis[1].set_ylabel(r'Power [$\mu W$]')
+    
+    img_path = rf'D:/3CS/DATA/PowerCorrelations/{pow_id}/pow_ratio_plot.png'
+    if not os.path.exists(img_path):
+        plt.savefig(img_path)
+    
+    plt.show()
+    
+    return inter_b0_over_a0, inter_b1_over_a1
 
 
 
