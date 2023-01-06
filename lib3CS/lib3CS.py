@@ -38,7 +38,7 @@ import matplotlib.pyplot as plt
 
 # -- -------- --- #
 
-## REQUIRED VARIABLES FROM CONFIG FILE ##
+##   REQUIRED VARIABLES FROM CONFIG FILE   ##
 
 # PATH_TO_SINGLE
 path_to_single = 'D:\\3CS\\DATA\\SingleExposures'
@@ -49,6 +49,52 @@ path_to_power = 'D:\\3CS\\DATA\\PowerCorrelations'
 # PATH TO ELECTRONICNOISE
 path_to_noise = 'D:\\3CS\\DATA\\ElectronicNoise'
 
+##     LINE NUMBERS OF VALUES      ##
+
+link_LINE =                         0
+pm_read_LINE =                      1
+pm_unit_LINE =                      2
+pm_count_LINE =                     3
+pm_wavelength_LINE =                4
+spfw_LINE =                         5
+lpfw_LINE =                         6
+lpfw2_LINE =                        7
+mono_grating_LINE =                 8
+mono_wavelength_LINE =              9
+spectro_grating_LINE =              10
+# there's a space at line           11
+Date_and_Time_LINE =                12
+Software_Version_LINE =             13
+Temperature_LINE =                  14
+Model_LINE =                        15
+Data_Type_LINE =                    16
+Acquisition_Mode_LINE =             17
+Trigger_Mode_LINE =                 18
+Exposure_Time_LINE =                19
+Readout_Mode_LINE =                 20
+Horizontal_binning_LINE =           21
+Extended_Dynamic_Range_LINE =       22
+Horizontally_flipped_LINE =         23
+Vertical_Shift_Speed_LINE =         24
+Pixel_Readout_Rate_LINE =           25
+Baseline_Clamp_LINE =               26
+Clock_Amplitude_LINE =              27
+Output_Amplifier_LINE =             28
+Serial_Number_LINE =                29
+Pre_Amplifier_Gain_LINE =           30
+Spurious_Noise_Filter_Mode_LINE =   31
+Photon_counted_LINE =               32
+Data_Averaging_Filter_Mode_LINE =   33
+SR193i_LINE =                       34
+Serial_Number_LINE =                35
+Wavelength_LINE =                   36
+Grating_Groove_Density_LINE =       37
+Grating_Blaze_LINE =                38
+Input_Side_Slit_Width_LINE =        39
+# there's a space at line           40
+# there's a space at line           41
+# there's a space at line           42
+start =                             43
 
 
 """
@@ -338,6 +384,53 @@ def read_xy(path,startline,split=None,col=2):
         w = w.astype(np.float);x = x.astype(np.float);y = y.astype(np.float)
         return w, x, y
     
+    
+
+"""
+takes a string as input (e.g. 'power') and return that measurement's value of the requested value
+""" 
+def read_value(path,value,split=None):
+    
+    file = open(path,'r')
+    Lines = file.readlines()
+    
+    if value == 'power':
+        req_val = float(Lines[pm_read_LINE].split()[1])
+        
+    elif value == 'power unit':
+        req_val = Lines[pm_unit_LINE].split()[1]
+        
+    elif value == 'power count':
+        req_val = float(Lines[pm_count_LINE].split()[1])
+        
+    elif value == 'power wl':
+        req_val = float(Lines[pm_wavelength_LINE].split()[1])
+        
+    elif value == 'spfw':
+        req_val = int(Lines[spfw_LINE].split()[1])
+        
+    elif value == 'lpfw':
+        req_val = int(Lines[lpfw_LINE].split()[1])
+        
+    elif value == 'lpfw2':
+        req_val = int(Lines[lpfw2_LINE].split()[1])
+        
+    elif value == 'mono gr':
+        req_val = int(Lines[mono_grating_LINE].split()[1])
+        
+    elif value == 'mono wl':
+        req_val = float(Lines[mono_wavelength_LINE].split()[1])
+        
+    elif value == 'spec gr':
+        req_val = int(Lines[spectro_grating_LINE].split()[1])
+        
+    elif value == 'temp':
+        req_val = float(Lines[Temperature_LINE].split()[2])
+        
+    elif value == 't':
+        req_val = float(Lines[Exposure_Time_LINE].split()[3])
+    
+    return req_val
 
 
 
@@ -414,7 +507,7 @@ def take_exposure():
     time.sleep(1)
     
     query = input('Save this signal? (y or n): ')
-    if query == 'y' or 'Y':
+    if (query == 'y') or (query == 'Y'):
         crystal = input('Enter the name of the crystal: ')
         perm_id = rf'{crystal}_{now}'
         save_path = os.path.join(path_to_single,rf'{perm_id}.txt')
@@ -549,7 +642,8 @@ def take_power(min_wl, max_wl,step):
     
     
 """
-analyses the power ratio between B and A
+analyses the power ratio between B and A, and returns two interpolated functions for the ratio as a function
+of wavelength, one for each monochromator grating.
 """
 def analyse_power(pow_id):
     
@@ -604,10 +698,62 @@ def analyse_power(pow_id):
     
     plt.show()
     
-    return inter_b0_over_a0, inter_b1_over_a1
+    return ratio0, ratio1
 
 
-
+"""
+takes two inputs: the path of signal to be corrected and the power id of the specific calibration to be used,
+and returns the corrected array (wl vs photon_per_photon)
+"""
+def correct_power(sig_path,pow_id):
     
+    # get the interpolated power ratios
+    fun0, fun1 = analyse_power(pow_id)
+    
+    # get the sample power reading of the signal
+    sample_power = read_value(sig_path,'power')
+    
+    # get the monochromator grating value
+    mono_gr = read_value(sig_path,'mono gr')
+    
+    # get the exposure time of the signal
+    t = read_value(sig_path, 't')
+    
+    # get the wavelength of the reading
+    mono_wl = read_value(sig_path,'mono wl')
+    power_wl = read_value(sig_path,'power wl')
+    if mono_wl != power_wl:
+        raise Exception(rf"Monochromator and power meter b do not agree on their wavelengths: {mono_wl} vs {pow_wl}")
+    
+    # calculate total photon count from sample
+    h = 6.626070151e-34
+    c = 299792458
+    if mono_gr == 0:
+        ratio = fun0(mono_wl)
+    elif mono_gr == 1:
+        ratio = fun1(mono_wl)
+        
+    total_power = sample_power/ratio
+    total_photon = ((total_power*t)/(h*c)) * (mono_wl*1e-9)
+    
+    # get only the metadata
+    f = open(sig_path)
+    Lines = f.readlines()
+    metadata = Lines[:start]
+    
+    # build new power corrected data
+    sig = read_xy(sig_path,start)
+    x = sig[0]
+    y = np.divide(sig[1],total_photon)
+    
+    new_sig = np.stack((x, y))
+    
+    plt.plot(new_sig[0],new_sig[1],color='darkred')
+    plt.xlabel(r'Wavelength [$nm$]')
+    plt.ylabel('Photon per photon count')
+    plt.grid('on')
+    plt.title(rf'Power corrected signal using: {pow_id}')
+    
+    return metadata, new_sig
     
     
