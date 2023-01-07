@@ -50,6 +50,9 @@ path_to_power = 'D:\\3CS\\DATA\\PowerCorrelations'
 path_to_noise = 'D:\\3CS\\DATA\\ElectronicNoise'
 
 ##     LINE NUMBERS OF VALUES      ##
+"""
+The following is the standard layout of signal text file
+"""
 
 link_LINE =                         0
 pm_read_LINE =                      1
@@ -475,19 +478,99 @@ def save_string(string,path,newline):
 
 
 """
-takes an exposure without regard to any settings
-"""
-def take_exposure():
+writes the top part of the standard file format containing the metadata to a string
+"""   
+def gather_metadata(baseline=False):
 
-    # take exposure
-    s.source_shutter.on = True
-    s.spectro.shutter= "open"
-    s.spectro.running  = True
-    s.spectro.shutter = "closed"
-    powerval = s.power_meter_b.power
-    time.sleep(0.1)
-    s.source_shutter.on = False
+    print('Gathering metadata... this may take a minute.')
     
+    data = ''
+    data += 'link: '+ path_to_single +'\n'
+    
+    if baseline == False:
+        powerval = s.power_meter_b.power 
+        data += 'pm_read: '+str(powerval) +'\n'
+        
+        powerunit = s.power_meter_b.unit
+        data += 'pm_unit: '+str(powerunit) +'\n'
+        
+        power_count = s.power_meter_b.count
+        data += 'pm_count: '+str(power_count) +'\n'
+        
+        power_wavelength = s.power_meter_b.wavelength
+        data += 'pm_wavelength: '+str(power_wavelength) +'\n'
+        
+    elif baseline == True:
+        data += 'pm_read: '+ 'NA' +'\n'
+    
+        data += 'pm_unit: '+'NA' +'\n'
+        
+        data += 'pm_count: '+'NA' +'\n'
+        
+        data += 'pm_wavelength: '+'NA' +'\n'
+             
+    
+    data += 'spfw: '+ str(s.spfw.position) +'\n'
+    data += 'lpfw: '+ str(s.lpfw.position) +'\n'
+    data += 'lpfw2: '+ str(s.lpfw2.position) +'\n'
+    data += 'mono_grating: '+ str(s.horiba.gr) +'\n'
+    data += 'mono_wavelength: '+ str(round(s.horiba.wl,1)) +'\n'
+    data += 'spectro_grating: '+ str(s.spectro.grating) +'\n'
+    data+='\n'
+    
+    return data
+
+
+"""
+takes in a string of metadata and file path to spectrometer measurement text file and creates a new
+standard file format, while deleting the raw spectrometer file
+"""   
+def make_standard(spec_file, data,save_path):
+    
+    # merge metadata with signal data
+    with open(spec_file,'r') as fp:
+        data2 = fp.read()
+        data+=data2
+    
+    open(save_path,'x')
+    with open(save_path,'w') as fp:
+        fp.write(data)
+        
+    os.remove(spec_file)
+    print(rf'Saved signal to: {save_path} .')
+    
+    return None
+
+
+"""
+takes an exposure without regard to any settings, for simple user interface.
+if baseline set to True, then the shutters remain closed
+"""
+def take_exposure(baseline=False):
+
+    if baseline == False:
+
+        # take exposure
+        s.source_shutter.on = True
+        s.spectro.shutter= "open"
+        print('Taking exposure...')
+        s.spectro.running  = True
+        print('Done')
+        s.spectro.shutter = "closed"
+        powerval = s.power_meter_b.power
+        time.sleep(0.1)
+        s.source_shutter.on = False
+        
+    elif baseline == True:
+        s.source_shutter.on = False
+        s.spectro.shutter = 'closed'
+        print('Taking exposure...')
+        s.spectro.running  = True
+        print('Done')
+        powerval = s.power_meter_b.power
+        time.sleep(0.1)
+    
+    print('Generating plot...')
     # generate unique date id
     now  = date_id()
     temp_id = rf'exp_{now}'
@@ -508,63 +591,35 @@ def take_exposure():
     
     query = input('Save this signal? (y or n): ')
     if (query == 'y') or (query == 'Y'):
-        crystal = input('Enter the name of the crystal: ')
+        crystal = input('Enter the name of the crystal/exposure type: ')
         perm_id = rf'{crystal}_{now}'
-        save_path = os.path.join(path_to_single,rf'{perm_id}.txt')
-        
-        print()
-        print('Gathering metadata... this may take a minute.')
-        
-        # build metadata
-        data = ''
-        data += 'link: '+ path_to_single +'\n'
-        
-        data += 'pm_read: '+str(powerval) +'\n'
-        
-        powerunit = s.power_meter_b.unit
-        data += 'pm_unit: '+str(powerunit) +'\n'
-        
-        power_count = s.power_meter_b.count
-        data += 'pm_count: '+str(power_count) +'\n'
-        
-        power_wavelength = s.power_meter_b.wavelength
-        data += 'pm_wavelength: '+str(power_wavelength) +'\n'        
-        
-        data += 'spfw: '+ str(s.spfw.position) +'\n'
-        data += 'lpfw: '+ str(s.lpfw.position) +'\n'
-        data += 'lpfw2: '+ str(s.lpfw2.position) +'\n'
-        data += 'mono_grating: '+ str(s.horiba.gr) +'\n'
-        data += 'mono_wavelength: '+ str(round(s.horiba.wl,1)) +'\n'
-        data += 'spectro_grating: '+ str(s.spectro.grating) +'\n'
-        data+='\n'
-        
-        # merge metadata with signal data
-        with open(file_path,'r') as fp:
-            data2 = fp.read()
-            data+=data2
         
         folder_path = os.path.join(path_to_single,rf'{perm_id}')
         if not os.path.exists(folder_path):
             os.mkdir(folder_path)
-            
-        save_path =  os.path.join(folder_path,rf'{perm_id}.txt') 
-        open(save_path,'x')
-        with open(save_path,'w') as fp:
-            fp.write(data)
-   
-        print()
-        print('Saved plot as: ')
+        
+        query2 = input('Add a comment here (or leave empty): ')
+        if query2 != None:
+            comment_path = os.path.join(folder_path,'comments.txt')
+            if not os.path.exists(comment_path):
+                open(comment_path,'x')
+            with open(comment_path,'w') as fp:
+                fp.write(query2)
+
+        save_path =  os.path.join(folder_path,rf'{perm_id}.txt')
+        data = gather_metadata()
+        make_standard(file_path,data,save_path)
 
         fig_path = os.path.join(folder_path,rf'{crystal}_plot.png')
-        plot_signal(file_path,fig_path,31,title=rf'{perm_id}',save=True)
-            
-        os.remove(file_path)
-        print(rf'Saved signal to: {save_path} .')
+        plot_signal(save_path,fig_path,start,title=rf'{perm_id}',save=True)
+        plt.close()
         
     else:
         os.remove(file_path)
         print()
         print('Did not save signal.')
+        
+    return None
 
 
 
@@ -670,15 +725,15 @@ def analyse_power(pow_id):
     
     figure, axis = plt.subplots(1, 2)
     
-    axis[0].plot(wl0,b0_over_a0, 'o',color='darkred',label='Mono_grating 0')
-    axis[0].plot(wl0,inter_b0_over_a0, '-',color='red')
-    axis[0].plot(wl1,b1_over_a1, 'o',color='darkblue',label='Mono_grating 1')
-    axis[0].plot(wl1,inter_b1_over_a1, '-',color='blue')
+    axis[0].scatter(wl0,b0_over_a0, s=7,color='darkred')
+    axis[0].plot(wl0,inter_b0_over_a0, '-',color='red',label='Mono_grating 0')
+    axis[0].scatter(wl1,b1_over_a1, s=7,color='darkblue')
+    axis[0].plot(wl1,inter_b1_over_a1, '-',color='blue',label='Mono_grating 1')
     
     axis[0].grid('on')
     axis[0].legend()
     axis[0].set_title('Power meter ratio: '+ pow_id)
-    axis[0].set_xlabel(r'Wavelength $[nm]$')
+    axis[0].set_xlabel(r'Excitation wavelength $[nm]$')
     axis[0].set_ylabel('B/A')
     
     axis[1].plot(wl0,np.multiply(a0,1e6),color='darkgreen',label='Mono_grating 0')
@@ -689,7 +744,7 @@ def analyse_power(pow_id):
     axis[1].grid('on')
     axis[1].legend()
     axis[1].set_title('Monochromator efficiency: '+pow_id)
-    axis[1].set_xlabel(r'Wavelength $[nm]$')
+    axis[1].set_xlabel(r'Excitation wavelength $[nm]$')
     axis[1].set_ylabel(r'Power [$\mu W$]')
     
     img_path = rf'D:/3CS/DATA/PowerCorrelations/{pow_id}/pow_ratio_plot.png'
@@ -701,9 +756,10 @@ def analyse_power(pow_id):
     return ratio0, ratio1
 
 
+
 """
 takes two inputs: the path of signal to be corrected and the power id of the specific calibration to be used,
-and returns the corrected array (wl vs photon_per_photon)
+and returns the corrected array (wl vs photon_per_photon) together with its metadata from the signal path
 """
 def correct_power(sig_path,pow_id):
     
@@ -748,6 +804,7 @@ def correct_power(sig_path,pow_id):
     
     new_sig = np.stack((x, y))
     
+    
     plt.plot(new_sig[0],new_sig[1],color='darkred')
     plt.xlabel(r'Wavelength [$nm$]')
     plt.ylabel('Photon per photon count')
@@ -756,4 +813,69 @@ def correct_power(sig_path,pow_id):
     
     return metadata, new_sig
     
+
+
+"""
+takes an exposure of the baseline electronic noise, given an exposure time and spectrometer wavelength and grating
+"""
+def take_baseline(folder_path,t,spec_wl,spec_gr):
     
+    print('Making sure shutters are closed...')
+    s.spectro.shutter = "closed"
+    s.source_shutter.on = False
+    print(rf'Setting exposure time to {t} seconds')
+    s.spectro.exposure = t
+    print(rf'Setting spectrometer wavelength to {spec_wl}nm')
+    s.spectro.wavelength = spec_wl
+    print(rf'Setting spectrometer grating to {spec_gr}')
+    s.spectro.grating = spec_gr
+    
+    now = date_id()
+    baseline_id = rf'BL_{now}_{t}sec_{spec_wl}wl_{spec_gr}gr'
+
+    temp_path = os.path.join(folder_path,'temp.txt')
+    save_path = os.path.join(folder_path,rf'{baseline_id}.txt')
+    
+    print('Taking exposure...')
+    s.spectro.running  = True
+    s.spectro.save_path = temp_path
+    s.spectro.saved = True
+    
+    data = gather_metadata(baseline=True)
+    make_standard(temp_path,data,save_path)
+    
+    return save_path
+
+
+
+"""
+fourth order polynomial
+"""
+def poly4(x,a,b,c,d,e):
+    return a*x**4 + b*x**3 + c*x**2 + d*x + e
+
+
+
+"""
+second order polynomial
+"""
+def poly2(x,a,b,c):
+    return a*x**2 + b*x + c
+
+"""
+analyses a baseline measurement signal and returns a fourth order best fit polynomial
+"""
+def analyse_baseline(bl_path):
+    
+    x,y = read_xy(bl_path,start)
+    pixel_array = np.arange(0,1600,1)
+    
+    fit = np.polyfit(pixel_array,y,2)
+    
+    plt.scatter(pixel_array,y,s=2,color='red')
+    plt.plot(pixel_array,poly2(pixel_array,fit[0],fit[1],fit[2]),color='darkred')
+    plt.xlabel('Pixel')
+    plt.ylabel('Photon Count')
+    plt.grid('on')
+    
+    return fit
