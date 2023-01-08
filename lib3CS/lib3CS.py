@@ -164,7 +164,7 @@ def zero():
 """
 Lets the user manually change system settings.
 """
-def ctrl(source_power = None, source_shutter_control = None, source_shutter = None, spfw = None, lpfw = None, lpfw2 = None, flipper = None, flipperB = None, mono_wl = None, mono_gr = None, spec_gr = None, spec_wl = None, spec_exp = None, spec_slit = None, spec_shutter = None, spec_running = None, spec_save_path = None, spec_saved = None, power_meter_a_count = None, power_meter_b_count = None, power_meter_a_power = None, power_meter_b_power = None, power_meter_a_unit = None, power_meter_b_unit = None):
+def ctrl(source_power = None, source_shutter_control = None, source_shutter = None, spfw = None, lpfw = None, lpfw2 = None, flipper = None, flipperB = None, mono_wl = None, mono_gr = None, spec_gr = None, spec_wl = None, spec_exp = None, spec_slit = None, spec_shutter = None, spec_running = None, spec_save_path = None, spec_saved = None, power_meter_a_count = None, power_meter_b_count = None, power_meter_a_power = None, power_meter_b_power = None, power_meter_a_unit = None, power_meter_b_unit = None, power_meter_a_wavelength = None, power_meter_b_wavelength = None):
     
     if source_power != None:
         print(rf'Setting source_power to {source_power}%')
@@ -263,6 +263,14 @@ def ctrl(source_power = None, source_shutter_control = None, source_shutter = No
     if power_meter_b_unit == True:
         pow_b_unit = s.power_meter_b.unit
         print('Unit of power meter b: '+str(pow_b_unit))
+        
+    if power_meter_a_wavelength != None:
+        print(rf'Setting power meter a wavelength to {power_meter_a_wavelength}nm')
+        s.power_meter_a.wavelength = power_meter_a_wavelength
+        
+    if power_meter_b_wavelength != None:
+        print(rf'Setting power meter b wavelength to {power_meter_b_wavelength}nm')
+        s.power_meter_b.wavelength = power_meter_b_wavelength
         
     print()
     print('All set.')
@@ -427,6 +435,9 @@ def read_value(path,value,split=None):
     elif value == 'spec gr':
         req_val = int(Lines[spectro_grating_LINE].split()[1])
         
+    elif value == 'spec wl':
+        req_val = float(Lines[Wavelength_LINE].split()[2])
+        
     elif value == 'temp':
         req_val = float(Lines[Temperature_LINE].split()[2])
         
@@ -480,16 +491,15 @@ def save_string(string,path,newline):
 """
 writes the top part of the standard file format containing the metadata to a string
 """   
-def gather_metadata(baseline=False):
+def gather_metadata(power,baseline=False):
 
-    print('Gathering metadata... this may take a minute.')
+    print('Gathering metadata... ')
     
     data = ''
     data += 'link: '+ path_to_single +'\n'
     
     if baseline == False:
-        powerval = s.power_meter_b.power 
-        data += 'pm_read: '+str(powerval) +'\n'
+        data += 'pm_read: '+str(power) +'\n'
         
         powerunit = s.power_meter_b.unit
         data += 'pm_unit: '+str(powerunit) +'\n'
@@ -607,19 +617,21 @@ def take_exposure(baseline=False):
                 fp.write(query2)
 
         save_path =  os.path.join(folder_path,rf'{perm_id}.txt')
-        data = gather_metadata()
+        data = gather_metadata(powerval)
         make_standard(file_path,data,save_path)
 
         fig_path = os.path.join(folder_path,rf'{crystal}_plot.png')
         plot_signal(save_path,fig_path,start,title=rf'{perm_id}',save=True)
         plt.close()
         
+        return save_path
+        
     else:
         os.remove(file_path)
         print()
         print('Did not save signal.')
         
-    return None
+        return None
 
 
 
@@ -629,7 +641,7 @@ takes power correlation data between power meters A and B
 def take_power(min_wl, max_wl,step):
     
     # zero the system before starting
-    zero()
+    #zero()
     
     now = date_id()
     pow_id = rf'PowCorr_{now}'
@@ -692,7 +704,7 @@ def take_power(min_wl, max_wl,step):
     s.source_shutter.on = False
     print('All done.')
     
-    return None
+    return pow_id
     
     
     
@@ -761,7 +773,7 @@ def analyse_power(pow_id):
 takes two inputs: the path of signal to be corrected and the power id of the specific calibration to be used,
 and returns the corrected array (wl vs photon_per_photon) together with its metadata from the signal path
 """
-def correct_power(sig_path,pow_id):
+def correct_power(sig_path,pow_id,save_path):
     
     # get the interpolated power ratios
     fun0, fun1 = analyse_power(pow_id)
@@ -779,7 +791,7 @@ def correct_power(sig_path,pow_id):
     mono_wl = read_value(sig_path,'mono wl')
     power_wl = read_value(sig_path,'power wl')
     if mono_wl != power_wl:
-        raise Exception(rf"Monochromator and power meter b do not agree on their wavelengths: {mono_wl} vs {pow_wl}")
+        raise Exception(rf"Monochromator and power meter b do not agree on their wavelengths: {mono_wl} vs {power_wl}")
     
     # calculate total photon count from sample
     h = 6.626070151e-34
@@ -802,8 +814,19 @@ def correct_power(sig_path,pow_id):
     x = sig[0]
     y = np.divide(sig[1],total_photon)
     
-    new_sig = np.stack((x, y))
     
+    new_sig = np.stack((x, y))
+    """
+    data2 = ''
+    for line in range(len(new_sig[0])):
+        data2+= rf'{new_sig[line].split()[0]} {new_sig[line].split()[1]}'
+        data2+= '\n'
+    
+    data = metadata+data2
+    if not os.path.exists(save_path):
+        f = open(save_path,'x')
+        f.write(data)
+    """
     
     plt.plot(new_sig[0],new_sig[1],color='darkred')
     plt.xlabel(r'Wavelength [$nm$]')
@@ -811,7 +834,7 @@ def correct_power(sig_path,pow_id):
     plt.grid('on')
     plt.title(rf'Power corrected signal using: {pow_id}')
     
-    return metadata, new_sig
+    return new_sig
     
 
 
@@ -841,7 +864,7 @@ def take_baseline(folder_path,t,spec_wl,spec_gr):
     s.spectro.save_path = temp_path
     s.spectro.saved = True
     
-    data = gather_metadata(baseline=True)
+    data = gather_metadata(0,baseline=True)
     make_standard(temp_path,data,save_path)
     
     return save_path
@@ -862,6 +885,8 @@ second order polynomial
 def poly2(x,a,b,c):
     return a*x**2 + b*x + c
 
+
+
 """
 analyses a baseline measurement signal and returns a fourth order best fit polynomial
 """
@@ -870,12 +895,65 @@ def analyse_baseline(bl_path):
     x,y = read_xy(bl_path,start)
     pixel_array = np.arange(0,1600,1)
     
+    fit_wl = np.polyfit(x,y,2)
     fit = np.polyfit(pixel_array,y,2)
     
     plt.scatter(pixel_array,y,s=2,color='red')
     plt.plot(pixel_array,poly2(pixel_array,fit[0],fit[1],fit[2]),color='darkred')
     plt.xlabel('Pixel')
     plt.ylabel('Photon Count')
+    plt.title(rf'Electronic baseline: {bl_path}')
     plt.grid('on')
     
-    return fit
+    return fit_wl, fit
+
+
+
+"""
+takes a signal and baseline measurement as input, and saves a baseline-subtracted signal
+"""
+def subtract_baseline(sig_path, bl_path,save_path):
+    
+    sig_wl,sig_count = read_xy(sig_path,start)
+    fit = analyse_baseline(bl_path)[0]
+    
+    # check for wl agreement
+    if read_value(sig_path,'spec wl') != read_value(bl_path,'spec wl'):
+        print('Wavelengths do not agree.')
+
+    # subtract the baseline
+    count = 0
+    for wl in sig_wl:
+        sig_count[count] =  sig_count[count] - poly2(wl,fit[0],fit[1],fit[2])
+        count+=1
+        
+    # plot on screen
+    plt.close()
+    plt.rcParams["figure.figsize"] = 12, 4
+    plt.plot(sig_wl, sig_count, color='darkred')
+    plt.xlabel(r"Wavelength [$nm$]")
+    plt.ylabel('Photon Count')
+    plt.grid('on')
+    plt.title(rf"Baseline subtracted signal: {sig_path}")
+    
+    # save
+    sig = open(sig_path,'r')
+    sig_lines = sig.readlines()[:start]
+    metadata = ''
+    for line in sig_lines:
+            metadata+=line
+    
+    data2 = ''
+    count = 0
+    for wl in sig_wl:
+        data2+=rf'{wl} {sig_count[count]}'
+        data2+='\n'
+        count+=1
+        
+    data = metadata+data2
+    
+    if not os.path.exists(save_path):
+        f = open(save_path,'x')
+        f.write(data)
+    
+    return save_path
