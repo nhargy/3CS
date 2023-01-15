@@ -164,7 +164,7 @@ def zero():
 """
 Lets the user manually change system settings.
 """
-def ctrl(source_power = None, source_shutter_control = None, source_shutter = None, spfw = None, lpfw = None, lpfw2 = None, flipper = None, flipperB = None, mono_wl = None, mono_gr = None, spec_gr = None, spec_wl = None, spec_exp = None, spec_slit = None, spec_shutter = None, spec_running = None, spec_save_path = None, spec_saved = None, power_meter_a_count = None, power_meter_b_count = None, power_meter_a_power = None, power_meter_b_power = None, power_meter_a_unit = None, power_meter_b_unit = None, power_meter_a_wavelength = None, power_meter_b_wavelength = None):
+def ctrl(source_power = None, source_shutter_control = None, source_shutter_on = None, spfw = None, lpfw = None, lpfw2 = None, flipper = None, flipperB = None, mono_wl = None, mono_gr = None, spec_gr = None, spec_wl = None, spec_exp = None, spec_slit = None, spec_shutter = None, spec_running = None, spec_save_path = None, spec_saved = None, power_meter_a_count = None, power_meter_b_count = None, power_meter_a_power = None, power_meter_b_power = None, power_meter_a_unit = None, power_meter_b_unit = None, power_meter_a_wavelength = None, power_meter_b_wavelength = None):
     
     if source_power != None:
         print(rf'Setting source_power to {source_power}%')
@@ -174,9 +174,9 @@ def ctrl(source_power = None, source_shutter_control = None, source_shutter = No
         print(rf'Setting source shutter to {source_shutter_control} control')
         s.source_shutter.control = source_shutter_control
 
-    if source_shutter != None:
-        print(rf'Source shutter on is {source_shutter}')
-        s.source_shutter = source_shutter
+    if source_shutter_on != None:
+        print(rf'Source shutter on is {source_shutter_on}')
+        s.source_shutter.on = source_shutter_on
 
     if spfw != None:
         print(rf'Setting spfw to position {spfw}')
@@ -624,6 +624,8 @@ def take_exposure(baseline=False):
         plot_signal(save_path,fig_path,start,title=rf'{perm_id}',save=True)
         plt.close()
         
+        os.remove(file_path)
+        
         return save_path
         
     else:
@@ -913,6 +915,7 @@ def analyse_baseline(bl_path):
 takes a signal and baseline measurement as input, and saves a baseline-subtracted signal
 """
 def subtract_baseline(sig_path, bl_path,save_path):
+
     
     sig_wl,sig_count = read_xy(sig_path,start)
     fit = analyse_baseline(bl_path)[0]
@@ -957,3 +960,70 @@ def subtract_baseline(sig_path, bl_path,save_path):
         f.write(data)
     
     return save_path
+
+
+
+"""
+from a SCAN folder, makes a heatmap
+"""
+def construct_heatmap(directory):
+    
+    from itertools import groupby
+    from statistics import mean
+    import pandas as pd
+    import seaborn as sns
+    import matplotlib.ticker as ticker
+    
+    # maximum wavelength of the spectrograph
+    max_wl = 1200
+ 
+    # here all the y_axis arrays will go
+    data = []
+    exc_wl = []
+    spec_wl = np.arange(0,1200)
+    
+    # loop through signals in the scan
+    for filename in os.listdir(directory):
+        f = os.path.join(directory, filename)
+        sig = read_xy(f,45)
+        mono_wl = read_value(f,'mono wl')
+        exc_wl.append(mono_wl)
+        
+        x_array = np.around(sig[0])
+        rounded_data = np.concatenate(([x_array],[sig[1]]))
+        rounded_dataT = rounded_data.T
+        
+        heat_array = np.array([[key, mean(map(lambda x: x[1], list(group)))] for key, group in groupby(rounded_dataT, lambda x:x[0])])
+        
+        y_array = heat_array.T[1]
+        x_array = heat_array.T[0]
+        
+        low_add = int(x_array[0])
+        high_add = int(max_wl - x_array[-1])
+        
+        low = np.zeros(low_add)
+        high = np.zeros(high_add-1)
+    
+        y_final = np.concatenate((low,y_array,high))
+        
+        data.append(list(y_final))
+        
+        
+    data_matrix = pd.DataFrame(data,columns=spec_wl,index=exc_wl)
+    
+    plt.figure(figsize=(15, 8))
+    sns.set(font_scale=1.5)
+
+    twod = sns.heatmap(data_matrix,
+                annot=False,
+                cmap='magma',
+                fmt='.5g',)
+
+    twod.xaxis.set_major_locator(ticker.MultipleLocator(50))
+    twod.xaxis.set_major_formatter(ticker.ScalarFormatter())
+    
+    plt.title(rf'Scan: {directory}')
+    plt.xlabel('Spectrometer Wl',fontsize=22)
+    plt.ylabel('Excitation Wl',fontsize=22)
+    
+    return None
